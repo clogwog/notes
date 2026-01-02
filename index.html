@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Markdown Site</title>
+    <title>Notes</title>
     <!-- Marked.js for MD to HTML -->
     <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
     <!-- Highlight.js for syntax highlighting (light theme by default) -->
@@ -365,7 +365,7 @@
                 content.classList.remove('initial-state');
 
                 // Extract filename and create H1 heading
-                const fileName = filePath.split('/').pop().replace(/\.md$/, '');
+                const fileName = decodeURIComponent(filePath.split('/').pop().replace(/\.md$/, ''));
                 const htmlContent = `<h1>${fileName}</h1>\n${marked.parse(processedText)}`;
                 content.innerHTML = htmlContent;
             } catch (error) {
