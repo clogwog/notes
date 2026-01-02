@@ -189,7 +189,7 @@
         <img src="./images/notes.jpg" alt="Notes">
     </div>
     <script>
-        const baseDir = '/notes/docs/'; // Your MD directory (with leading / for root-relative paths and trailing /)
+        const baseDir = './docs/'; // Your MD directory (relative path works for both main domain and subdomain)
         const sidebar = document.getElementById('sidebar');
         const content = document.getElementById('content');
         const hljsStyle = document.getElementById('hljs-style');
@@ -237,21 +237,43 @@
                 // Parse directory listing HTML for <a> links
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
-                const currentPrefix = baseDir + dirPath.replace(/\/$/, ''); // Adjusted for absolute baseDir (no leading / here since baseDir has it)
+                
                 const links = Array.from(doc.querySelectorAll('a'))
                     .map(a => {
                         let href = a.getAttribute('href') || '';
                         const displayName = a.textContent.trim().replace(/\/$/, ''); // Clean name for display
-                        // Normalize to relative href (handle absolute or relative)
+                        
+                        // Normalize to relative href
                         let relativeHref = href;
+                        
+                        // Skip parent directory and query params
+                        if (href === '../' || href.startsWith('?') || !href) {
+                            return null;
+                        }
+                        
+                        // Handle absolute paths - convert to relative
                         if (href.startsWith('/')) {
-                            if (href.startsWith(currentPrefix)) {
-                                relativeHref = href.substring(currentPrefix.length).replace(/^\//, '');
+                            // Resolve baseDir to absolute path
+                            const baseUrl = new URL(baseDir, window.location.href);
+                            const basePath = baseUrl.pathname.replace(/\/$/, '');
+                            const currentPath = basePath + (dirPath ? '/' + dirPath.replace(/\/$/, '') : '');
+                            const hrefPath = href.replace(/\/$/, '');
+                            
+                            // Check if href is within our docs directory
+                            if (hrefPath.startsWith(currentPath + '/') || hrefPath === currentPath) {
+                                relativeHref = hrefPath.substring(currentPath.length).replace(/^\//, '');
+                                if (href.endsWith('/') && relativeHref) {
+                                    relativeHref += '/';
+                                }
+                            } else {
+                                return null;
                             }
                         }
-                        return { relativeHref, displayName };
+                        // Relative paths (../, ./, or simple names) - use as is
+                        
+                        return relativeHref ? { relativeHref, displayName } : null;
                     })
-                    .filter(link => link.relativeHref && link.relativeHref !== '../' && !link.relativeHref.startsWith('?') && !link.relativeHref.startsWith('/'));
+                    .filter(link => link && link.relativeHref && link.relativeHref !== '../');
 
                 let hasMdFiles = false;
 
