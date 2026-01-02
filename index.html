@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Markdown Site</title>
+    <!-- Marked.js for MD to HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+    <!-- Highlight.js for syntax highlighting (light theme by default) -->
+    <link id="hljs-style" rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-color: #f4f4f4;
+            --text-color: #000000;
+            --sidebar-border: #ccc;
+            --pre-bg: #f8f8f8;
+            --pre-border: #ddd;
+        }
+
+        .dark {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --sidebar-border: #444;
+            --pre-bg: #1e1e1e;
+            --pre-border: #333;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            display: flex;
+            margin: 0;
+            padding: 0;
+        }
+
+        #sidebar {
+            min-width: 150px;
+            max-width: 50vw;
+            width: max-content;
+            flex-shrink: 0;
+            padding: 10px;
+            border-right: 3px solid var(--sidebar-border);
+            overflow: auto;
+            height: 100vh;
+            position: relative;
+        }
+
+        #resize-handle {
+            position: absolute;
+            top: 0;
+            right: -5px;
+            width: 10px;
+            height: 100%;
+            cursor: col-resize;
+            background: transparent;
+            z-index: 10;
+        }
+
+        #resize-handle:hover {
+            background: rgba(128, 128, 128, 0.4);
+        }
+
+        #sidebar.resizing {
+            user-select: none;
+        }
+
+        body.resizing {
+            user-select: none;
+            cursor: col-resize;
+        }
+
+        #content {
+            flex: 1;
+            padding: 20px;
+        }
+
+        #content.initial-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+
+        #content.initial-state img {
+            max-width: 80%;
+            max-height: 80vh;
+            margin: 20px auto;
+        }
+
+        /* Sidebar list styles */
+        #sidebar ul {
+            list-style: none;
+            padding-left: 15px;
+        }
+
+        #sidebar li.dir>ul {
+            display: none;
+        }
+
+        /* Collapsible subdirs */
+        #sidebar li.dir.open>ul {
+            display: block;
+        }
+
+        /* Content area list styles */
+        #content ul {
+            list-style: disc;
+            padding-left: 30px;
+            margin: 10px 0;
+        }
+
+        #content ol {
+            list-style: decimal;
+            padding-left: 30px;
+            margin: 10px 0;
+        }
+
+        #content li {
+            margin: 5px 0;
+        }
+
+        a {
+            cursor: pointer;
+            color: var(--text-color);
+        }
+
+        #content a {
+            white-space: normal;
+        }
+
+        #sidebar a {
+            white-space: nowrap;
+        }
+
+        li.dir>span {
+            white-space: nowrap;
+        }
+
+        /* Additional styles for code blocks */
+        pre {
+            background: var(--pre-bg);
+            border: 1px solid var(--pre-border);
+            border-radius: 4px;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+        }
+
+        #theme-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--pre-border);
+            cursor: pointer;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="theme-toggle">Toggle Theme</button>
+    <div id="sidebar">
+        <div id="resize-handle"></div>
+        Loading sidebar...
+    </div>
+    <div id="content" class="initial-state">
+        <p>Select a file from the sidebar.</p>
+        <img src="./images/notes.jpg" alt="Notes">
+    </div>
+    <script>
+        const baseDir = '/notes/docs/'; // Your MD directory (with leading / for root-relative paths and trailing /)
+        const sidebar = document.getElementById('sidebar');
+        const content = document.getElementById('content');
+        const hljsStyle = document.getElementById('hljs-style');
+        const themeToggle = document.getElementById('theme-toggle');
+
+        // Theme management
+        function setTheme(isDark) {
+            if (isDark) {
+                document.body.classList.add('dark');
+                hljsStyle.href = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                document.body.classList.remove('dark');
+                hljsStyle.href = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css';
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme');
+        setTheme(savedTheme === 'dark');
+
+        // Toggle button
+        themeToggle.addEventListener('click', () => {
+            const isDark = document.body.classList.contains('dark');
+            setTheme(!isDark);
+        });
+
+        // Configure Marked with Highlight.js for syntax highlighting
+        marked.setOptions({
+            highlight: function (code, lang) {
+                const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                return hljs.highlight(code, { language }).value;
+            },
+            langPrefix: 'hljs language-'
+        });
+
+        // Recursive function to build tree from directory listing
+        // Returns true if the directory contains any .md files (directly or in subdirectories)
+        async function buildTree(dirPath, parentUl) {
+            try {
+                const response = await fetch(baseDir + dirPath);
+                if (!response.ok) throw new Error('Failed to fetch dir');
+                const html = await response.text();
+                // Parse directory listing HTML for <a> links
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const currentPrefix = baseDir + dirPath.replace(/\/$/, ''); // Adjusted for absolute baseDir (no leading / here since baseDir has it)
+                const links = Array.from(doc.querySelectorAll('a'))
+                    .map(a => {
+                        let href = a.getAttribute('href') || '';
+                        const displayName = a.textContent.trim().replace(/\/$/, ''); // Clean name for display
+                        // Normalize to relative href (handle absolute or relative)
+                        let relativeHref = href;
+                        if (href.startsWith('/')) {
+                            if (href.startsWith(currentPrefix)) {
+                                relativeHref = href.substring(currentPrefix.length).replace(/^\//, '');
+                            }
+                        }
+                        return { relativeHref, displayName };
+                    })
+                    .filter(link => link.relativeHref && link.relativeHref !== '../' && !link.relativeHref.startsWith('?') && !link.relativeHref.startsWith('/'));
+
+                let hasMdFiles = false;
+
+                // First, add markdown files directly (they definitely indicate .md files exist)
+                links.forEach(link => {
+                    if (link.relativeHref.endsWith('.md')) {
+                        hasMdFiles = true;
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.textContent = link.displayName.replace(/\.md$/, ''); // Display without .md
+                        a.onclick = () => loadMarkdown(dirPath + link.relativeHref);
+                        li.appendChild(a);
+                        parentUl.appendChild(li);
+                    }
+                });
+
+                // Process directories and check if they contain .md files
+                for (const link of links) {
+                    if (link.relativeHref.endsWith('/')) {
+                        const subUl = document.createElement('ul');
+                        const hasMdInSubdir = await buildTree(dirPath + link.relativeHref, subUl);
+
+                        if (hasMdInSubdir) {
+                            hasMdFiles = true;
+                            const li = document.createElement('li');
+                            li.classList.add('dir');
+                            const toggle = document.createElement('span');
+                            toggle.textContent = '▶ ' + link.displayName;
+                            toggle.onclick = () => {
+                                li.classList.toggle('open');
+                                toggle.textContent = li.classList.contains('open') ? '▼ ' + link.displayName : '▶ ' + link.displayName;
+                            };
+                            li.appendChild(toggle);
+                            li.appendChild(subUl);
+                            parentUl.appendChild(li);
+                        }
+                    }
+                }
+
+                return hasMdFiles;
+            } catch (error) {
+                console.error(error);
+                return false;
+            }
+        }
+        // Preprocess Obsidian-style markdown syntax
+        function preprocessObsidianMarkdown(text, filePath) {
+            // Get the directory of the current markdown file for resolving relative paths
+            const fileDir = filePath.substring(0, filePath.lastIndexOf('/') + 1);
+
+            // Convert Obsidian image syntax ![[image.jpg]] to standard markdown ![alt](image.jpg)
+            // Also handle ![[image.jpg|alt text]] format
+            // Process images first (before links) to avoid conflicts
+            text = text.replace(/!\[\[([^\]]+)\]\]/g, (match, content) => {
+                const parts = content.split('|');
+                let imagePath = parts[0].trim();
+                const altText = parts.length > 1 ? parts.slice(1).join('|').trim() : imagePath.split('/').pop().replace(/\.[^.]*$/, '');
+
+                // Resolve paths: if it's a relative path (starts with ./ or ../ or no /), resolve relative to file
+                // Otherwise, treat it as relative to baseDir
+                if (!imagePath.startsWith('/') && !imagePath.startsWith('http')) {
+                    if (imagePath.startsWith('./') || imagePath.startsWith('../') || !imagePath.includes('/')) {
+                        // Relative to current file
+                        imagePath = fileDir + imagePath;
+                    }
+                    // Otherwise, treat as relative to baseDir (already correct)
+                }
+
+                // Make path relative to baseDir (remove leading /)
+                if (imagePath.startsWith('/')) {
+                    imagePath = imagePath.substring(1);
+                }
+
+                return `\n\n![${altText}](${baseDir}${imagePath})\n\n`;
+            });
+
+            // Convert Obsidian link syntax [[link|text]] to standard markdown [text](link)
+            // Process after images, so only remaining [[...]] patterns are links
+            text = text.replace(/\[\[([^\]]+)\]\]/g, (match, content) => {
+                const parts = content.split('|');
+                let linkPath = parts.length > 1 ? parts[0].trim() : content.trim();
+                const linkText = parts.length > 1 ? parts.slice(1).join('|').trim() : linkPath.split('/').pop().replace(/\.[^.]*$/, '');
+
+                // Resolve paths: if it's a relative path (starts with ./ or ../ or no /), resolve relative to file
+                // Otherwise, treat it as relative to baseDir
+                if (!linkPath.startsWith('/') && !linkPath.startsWith('http')) {
+                    if (linkPath.startsWith('./') || linkPath.startsWith('../') || !linkPath.includes('/')) {
+                        // Relative to current file
+                        linkPath = fileDir + linkPath;
+                    }
+                    // Otherwise, treat as relative to baseDir (already correct)
+                }
+
+                // Make path relative to baseDir (remove leading /)
+                if (linkPath.startsWith('/')) {
+                    linkPath = linkPath.substring(1);
+                }
+
+                return `[${linkText}](${baseDir}${linkPath})`;
+            });
+
+            return text;
+        }
+
+        // Load and render MD file
+        async function loadMarkdown(filePath) {
+            try {
+                const response = await fetch(baseDir + filePath);
+                const mdText = await response.text();
+                const processedText = preprocessObsidianMarkdown(mdText, filePath);
+                content.classList.remove('initial-state');
+
+                // Extract filename and create H1 heading
+                const fileName = filePath.split('/').pop().replace(/\.md$/, '');
+                const htmlContent = `<h1>${fileName}</h1>\n${marked.parse(processedText)}`;
+                content.innerHTML = htmlContent;
+            } catch (error) {
+                content.classList.remove('initial-state');
+                content.innerHTML = 'Error loading file.';
+            }
+        }
+        // Function to set sidebar width to fit content
+        function setSidebarToFitContent() {
+            // Measure the content width
+            const contentWidth = sidebar.scrollWidth;
+            // Only set explicit width if it's different from max-content
+            // This allows resize to work properly
+            if (contentWidth > 0) {
+                sidebar.style.width = contentWidth + 'px';
+            }
+        }
+
+        // Resize handle functionality
+        const resizeHandle = document.getElementById('resize-handle');
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = sidebar.offsetWidth;
+            sidebar.classList.add('resizing');
+            document.body.classList.add('resizing');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) {
+                return;
+            }
+            const diff = e.clientX - startX;
+            const newWidth = startWidth + diff;
+            const minWidth = 150;
+            const maxWidth = window.innerWidth * 0.5; // 50vw
+            const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+            sidebar.style.width = clampedWidth + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                sidebar.classList.remove('resizing');
+                document.body.classList.remove('resizing');
+            }
+        });
+
+        // Init sidebar
+        const rootUl = document.createElement('ul');
+        // Clear sidebar but preserve the resize handle
+        const existingHandle = document.getElementById('resize-handle');
+        sidebar.innerHTML = '';
+        if (existingHandle) {
+            sidebar.appendChild(existingHandle);
+        }
+        else {
+            const handle = document.createElement('div');
+            handle.id = 'resize-handle';
+            sidebar.appendChild(handle);
+        }
+        sidebar.appendChild(rootUl);
+        buildTree('', rootUl).then(() => {
+            // Set initial width to fit content after tree is built
+            setTimeout(() => {
+                setSidebarToFitContent();
+            }, 100); // Small delay to ensure DOM is fully rendered
+        }); // Start from root dir
+    </script>
+</body>
+
+</html>
+
+</html>
